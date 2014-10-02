@@ -12,7 +12,7 @@ subject to the following restrictions:
 1. The origin of this software must not be misrepresented; you must not claim that you wrote the original software. If you use this software in a product, an acknowledgment in the product documentation would be appreciated but is not required.
 2. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
-*/
+ */
 
 ///btSoftBody implementation by Nathanael Presson
 
@@ -47,59 +47,58 @@ class btSoftRigidDynamicsWorld;
 
 
 ///CcdPhysicsDemo shows basic stacking using Bullet physics, and allows toggle of Ccd (using key '1')
-class SoftDemo : public PlatformDemoApplication
-{
+
+class SoftDemo : public PlatformDemoApplication {
 public:
 
 	btAlignedObjectArray<btSoftSoftCollisionAlgorithm*> m_SoftSoftCollisionAlgorithms;
 
 	btAlignedObjectArray<btSoftRididCollisionAlgorithm*> m_SoftRigidCollisionAlgorithms;
 
-	btSoftBodyWorldInfo	m_softBodyWorldInfo;
+	btSoftBodyWorldInfo m_softBodyWorldInfo;
 
-	
 
-	bool								m_autocam;
-	bool								m_cutting;
-	bool								m_raycast;
-	btScalar							m_animtime;
-	btClock								m_clock;
-	int									m_lastmousepos[2];
-	btVector3							m_impact;
-	btSoftBody::sRayCast				m_results;
-	btSoftBody::Node*					m_node;
-	btVector3							m_goal;
-	bool								m_drag;
+
+	bool m_autocam;
+	bool m_cutting;
+	bool m_raycast;
+	btScalar m_animtime;
+	btClock m_clock;
+	int m_lastmousepos[2];
+	btVector3 m_impact;
+	btSoftBody::sRayCast m_results;
+	btSoftBody::Node* m_node;
+	btVector3 m_goal;
+	bool m_drag;
 
 
 	//keep the collision shapes, for deletion/cleanup
-	btAlignedObjectArray<btCollisionShape*>		m_collisionShapes;
+	btAlignedObjectArray<btCollisionShape*> m_collisionShapes;
 
-	btBroadphaseInterface*	m_broadphase;
+	btBroadphaseInterface* m_broadphase;
 
-	btCollisionDispatcher*	m_dispatcher;
+	btCollisionDispatcher* m_dispatcher;
 
 
-	btConstraintSolver*	m_solver;
+	btConstraintSolver* m_solver;
 
-	btCollisionAlgorithmCreateFunc*	m_boxBoxCF;
+	btCollisionAlgorithmCreateFunc* m_boxBoxCF;
 
 	btDefaultCollisionConfiguration* m_collisionConfiguration;
 
 
 public:
 
-	void	initPhysics();
+	void initPhysics();
 
-	void	exitPhysics();
+	void exitPhysics();
 
-	SoftDemo() : m_drag(false)
-	{
+	SoftDemo() : m_drag(false) {
 		setTexturing(true);
 		setShadows(true);
 	}
-	virtual ~SoftDemo()
-	{
+
+	virtual ~SoftDemo() {
 		exitPhysics();
 	}
 
@@ -107,38 +106,37 @@ public:
 
 	virtual void displayCallback();
 
-	void createStack( btCollisionShape* boxShape, float halfCubeSize, int size, float zPos );
+	void createStack(btCollisionShape* boxShape, float halfCubeSize, int size, float zPos);
 
-	static DemoApplication* Create()
-	{
+	static DemoApplication* Create() {
 		SoftDemo* demo = new SoftDemo;
 		demo->myinit();
 		demo->initPhysics();
 		return demo;
 	}
 
-	virtual	void setDrawClusters(bool drawClusters);
+	virtual void setDrawClusters(bool drawClusters);
 
-	virtual const btSoftRigidDynamicsWorld*	getSoftDynamicsWorld() const
-	{
+	virtual const btSoftRigidDynamicsWorld* getSoftDynamicsWorld() const {
 		///just make it a btSoftRigidDynamicsWorld please
 		///or we will add type checking
 		return (btSoftRigidDynamicsWorld*) m_dynamicsWorld;
 	}
 
-	virtual btSoftRigidDynamicsWorld*	getSoftDynamicsWorld()
-	{
+	virtual btSoftRigidDynamicsWorld* getSoftDynamicsWorld() {
 		///just make it a btSoftRigidDynamicsWorld please
 		///or we will add type checking
 		return (btSoftRigidDynamicsWorld*) m_dynamicsWorld;
 	}
 
 	//
-	void	clientResetScene();
-	void	renderme();
-	void	keyboardCallback(unsigned char key, int x, int y);
-	void	mouseFunc(int button, int state, int x, int y);
-	void	mouseMotionFunc(int x,int y);
+	void clientResetScene();
+	void renderme();
+	void keyboardCallback(unsigned char key, int x, int y);
+	void mouseFunc(int button, int state, int x, int y);
+	void mouseMotionFunc(int x, int y);
+
+	void updateWindVelocity(float x, float y, float z);
 
 };
 

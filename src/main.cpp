@@ -12,23 +12,44 @@ subject to the following restrictions:
 2. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
 */
-
 #include "SoftDemo.h"
 #include "GlutStuff.h"
 #include "GLDebugDrawer.h"
 #include "btBulletDynamicsCommon.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <pthread.h>
 
 GLDebugDrawer	gDebugDrawer;
 
+void *windHandler(void *ptr)
+{
+	SoftDemo* softDemo = (SoftDemo *)ptr;
+	while (1){
+		sleep(5);
+		softDemo->updateWindVelocity(0, 0, 0);
+	}
+}
+
 int main(int argc,char** argv)
 {
-
+	int ret;
+	pthread_t windThread;
+	
+	
 	SoftDemo* softDemo = new SoftDemo();
 
 	softDemo->initPhysics();
-        softDemo->getDynamicsWorld()->setDebugDrawer(&gDebugDrawer);
+	
+	softDemo->getDynamicsWorld()->setDebugDrawer(&gDebugDrawer);
 
-
+	ret = pthread_create(&windThread, NULL, windHandler, (void *)softDemo);
+	 
+	if (ret){
+		fprintf(stderr, "windThread failed to start: %d\n", ret);
+		return -1;
+	}
+	
 	glutmain(argc, argv,1024,768,"Bullet Physics Demo. http://bulletphysics.com",softDemo);
 
 	delete softDemo;

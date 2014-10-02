@@ -15,7 +15,6 @@ subject to the following restrictions:
 
 ///btSoftBody implementation by Nathanael Presson
 
-
 #include "btBulletDynamicsCommon.h"
 #include "BulletSoftBody/btSoftRigidDynamicsWorld.h"
 
@@ -302,18 +301,6 @@ struct ImplicitSphere : btSoftBody::ImplicitFn {
 	}
 };
 
-//
-// Tetra meshes
-//
-
-struct TetraBunny {
-#include "bunny.inl"
-};
-
-struct TetraCube {
-#include "cube.inl"
-};
-
 
 //
 // Random
@@ -332,99 +319,6 @@ static inline btVector3 Vector3Rand() {
 	return (p.normalized());
 }
 
-//
-// Rb rain
-//
-
-static void Ctor_RbUpStack(SoftDemo* pdemo, int count) {
-	float mass = 10;
-
-	btCompoundShape* cylinderCompound = new btCompoundShape;
-	btCollisionShape* cylinderShape = new btCylinderShapeX(btVector3(4, 1, 1));
-	btCollisionShape* boxShape = new btBoxShape(btVector3(4, 1, 1));
-	btTransform localTransform;
-	localTransform.setIdentity();
-	cylinderCompound->addChildShape(localTransform, boxShape);
-	btQuaternion orn(SIMD_HALF_PI, 0, 0);
-	localTransform.setRotation(orn);
-	//	localTransform.setOrigin(btVector3(1,1,1));
-	cylinderCompound->addChildShape(localTransform, cylinderShape);
-
-
-	btCollisionShape * shape[] = {cylinderCompound,
-		new btBoxShape(btVector3(1, 1, 1)),
-		new btSphereShape(1.5)};
-	static const int nshapes = sizeof (shape) / sizeof (shape[0]);
-	for (int i = 0; i < count; ++i) {
-		btTransform startTransform;
-		startTransform.setIdentity();
-		startTransform.setOrigin(btVector3(0, 2 + 6 * i, 0));
-		pdemo->localCreateRigidBody(mass, startTransform, shape[i % nshapes]);
-		//pdemo->localCreateRigidBody(mass,startTransform,shape[0]);
-	}
-}
-
-//
-// Big ball
-//
-
-static void Ctor_BigBall(SoftDemo* pdemo, btScalar mass = 10) {
-	btTransform startTransform;
-	startTransform.setIdentity();
-	startTransform.setOrigin(btVector3(0, 13, 0));
-	pdemo->localCreateRigidBody(mass, startTransform, new btSphereShape(3));
-}
-
-//
-// Big plate
-//
-
-static btRigidBody* Ctor_BigPlate(SoftDemo* pdemo, btScalar mass = 15, btScalar height = 4) {
-	btTransform startTransform;
-	startTransform.setIdentity();
-	startTransform.setOrigin(btVector3(0, height, 0.5));
-	btRigidBody* body = pdemo->localCreateRigidBody(mass, startTransform, new btBoxShape(btVector3(5, 1, 5)));
-	body->setFriction(1);
-	return (body);
-}
-
-//
-// Linear stair
-//
-
-static void Ctor_LinearStair(SoftDemo* pdemo, const btVector3& org, const btVector3& sizes, btScalar angle, int count) {
-	btBoxShape* shape = new btBoxShape(sizes);
-	for (int i = 0; i < count; ++i) {
-		btTransform startTransform;
-		startTransform.setIdentity();
-		startTransform.setOrigin(org + btVector3(sizes.x() * i * 2, sizes.y() * i * 2, 0));
-		btRigidBody* body = pdemo->localCreateRigidBody(0, startTransform, shape);
-		body->setFriction(1);
-	}
-}
-
-//
-// Softbox
-//
-
-static btSoftBody* Ctor_SoftBox(SoftDemo* pdemo, const btVector3& p, const btVector3& s) {
-	const btVector3 h = s * 0.5;
-	const btVector3 c[] = {p + h * btVector3(-1, -1, -1),
-		p + h * btVector3(+1, -1, -1),
-		p + h * btVector3(-1, +1, -1),
-		p + h * btVector3(+1, +1, -1),
-		p + h * btVector3(-1, -1, +1),
-		p + h * btVector3(+1, -1, +1),
-		p + h * btVector3(-1, +1, +1),
-		p + h * btVector3(+1, +1, +1)};
-	btSoftBody* psb = btSoftBodyHelpers::CreateFromConvexHull(pdemo->m_softBodyWorldInfo, c, 8);
-	psb->generateBendingConstraints(2);
-	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
-
-	return (psb);
-
-}
-
 static void Init_ClothAttach(SoftDemo* pdemo) {
 	//TRACEDEMO
 	const btScalar s = 4;
@@ -433,8 +327,8 @@ static void Init_ClothAttach(SoftDemo* pdemo) {
 	btSoftBody* psb = btSoftBodyHelpers::CreatePatch(pdemo->m_softBodyWorldInfo,
 			btVector3(-s, 1, -s),
 			btVector3(+s, 1, -s),
-			btVector3(-s, h, +s),
-			btVector3(+s, h, +s), r, r, 0, true);
+			btVector3(0, r * 2, -s),
+			btVector3(0, r * 2, -s), r, r, 0, true);
 
 
 	btTransform startTransform;
@@ -475,184 +369,11 @@ static void Init_ClothAttach(SoftDemo* pdemo) {
 	pdemo->m_autocam = true;
 	psb->appendAnchor(0, body);
 	psb->appendAnchor(r - 1, body);
-	psb->appendAnchor(72, body);
-	psb->appendAnchor(80, body);
+	psb->appendAnchor(r * (r - 1), body);
+	psb->appendAnchor(r * r - 1, body);
 }
 
-//
-// Volume conservation
-//
-
-static void Init_Volume(SoftDemo* pdemo) {
-	//TRACEDEMO
-	btSoftBody* psb = btSoftBodyHelpers::CreateEllipsoid(pdemo->m_softBodyWorldInfo, btVector3(35, 25, 0),
-			btVector3(1, 1, 1)*3,
-			512);
-	psb->m_materials[0]->m_kLST = 0.45;
-	psb->m_cfg.kVC = 20;
-	psb->setTotalMass(50, true);
-	psb->setPose(true, false);
-	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
-
-	Ctor_BigPlate(pdemo);
-	Ctor_LinearStair(pdemo, btVector3(0, 0, 0), btVector3(2, 1, 5), 0, 10);
-	pdemo->m_autocam = true;
-
-}
-
-//
-// Clusters
-//
-
-//
-
-static void Ctor_Gear(SoftDemo* pdemo, const btVector3& pos, btScalar speed) {
-	btTransform startTransform;
-	startTransform.setIdentity();
-	startTransform.setOrigin(pos);
-	btCompoundShape* shape = new btCompoundShape();
-#if 1
-	shape->addChildShape(btTransform(btQuaternion(0, 0, 0)), new btBoxShape(btVector3(5, 1, 6)));
-	shape->addChildShape(btTransform(btQuaternion(0, 0, SIMD_HALF_PI)), new btBoxShape(btVector3(5, 1, 6)));
-#else
-	shape->addChildShape(btTransform(btQuaternion(0, 0, 0)), new btCylinderShapeZ(btVector3(5, 1, 7)));
-	shape->addChildShape(btTransform(btQuaternion(0, 0, SIMD_HALF_PI)), new btBoxShape(btVector3(4, 1, 8)));
-#endif
-	btRigidBody* body = pdemo->localCreateRigidBody(10, startTransform, shape);
-	body->setFriction(1);
-	btDynamicsWorld* world = pdemo->getDynamicsWorld();
-	btHingeConstraint* hinge = new btHingeConstraint(*body, btTransform::getIdentity());
-	if (speed != 0) hinge->enableAngularMotor(true, speed, 3);
-	world->addConstraint(hinge);
-}
-
-//
-
-static btSoftBody* Ctor_ClusterBunny(SoftDemo* pdemo, const btVector3& x, const btVector3& a) {
-	btSoftBody* psb = btSoftBodyHelpers::CreateFromTriMesh(pdemo->m_softBodyWorldInfo, gVerticesBunny, &gIndicesBunny[0][0], BUNNY_NUM_TRIANGLES);
-	btSoftBody::Material* pm = psb->appendMaterial();
-	pm->m_kLST = 1;
-	pm->m_flags -= btSoftBody::fMaterial::DebugDraw;
-	psb->generateBendingConstraints(2, pm);
-	psb->m_cfg.piterations = 2;
-	psb->m_cfg.kDF = 1;
-	psb->m_cfg.collisions = btSoftBody::fCollision::CL_SS +
-			btSoftBody::fCollision::CL_RS;
-	psb->randomizeConstraints();
-	btMatrix3x3 m;
-	m.setEulerZYX(a.x(), a.y(), a.z());
-	psb->transform(btTransform(m, x));
-	psb->scale(btVector3(8, 8, 8));
-	psb->setTotalMass(150, true);
-	psb->generateClusters(1);
-	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
-	return (psb);
-}
-
-//
-
-static btSoftBody* Ctor_ClusterTorus(SoftDemo* pdemo, const btVector3& x, const btVector3& a, const btVector3& s = btVector3(2, 2, 2)) {
-	btSoftBody* psb = btSoftBodyHelpers::CreateFromTriMesh(pdemo->m_softBodyWorldInfo, gVertices, &gIndices[0][0], NUM_TRIANGLES);
-	btSoftBody::Material* pm = psb->appendMaterial();
-	pm->m_kLST = 1;
-	pm->m_flags -= btSoftBody::fMaterial::DebugDraw;
-	psb->generateBendingConstraints(2, pm);
-	psb->m_cfg.piterations = 2;
-	psb->m_cfg.collisions = btSoftBody::fCollision::CL_SS +
-			btSoftBody::fCollision::CL_RS;
-	psb->randomizeConstraints();
-	psb->scale(s);
-	psb->rotate(btQuaternion(a[0], a[1], a[2]));
-	psb->translate(x);
-	psb->setTotalMass(50, true);
-	psb->generateClusters(64);
-	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
-	return (psb);
-}
-
-//
-
-static struct MotorControl : btSoftBody::AJoint::IControl {
-
-	MotorControl() {
-		goal = 0;
-		maxtorque = 0;
-	}
-
-	btScalar Speed(btSoftBody::AJoint*, btScalar current) {
-		return (current + btMin(maxtorque, btMax(-maxtorque, goal - current)));
-	}
-	btScalar goal;
-	btScalar maxtorque;
-} motorcontrol;
-
-//
-
-struct SteerControl : btSoftBody::AJoint::IControl {
-
-	SteerControl(btScalar s) {
-		angle = 0;
-		sign = s;
-	}
-
-	void Prepare(btSoftBody::AJoint* joint) {
-		joint->m_refs[0][0] = btCos(angle * sign);
-		joint->m_refs[0][2] = btSin(angle * sign);
-	}
-
-	btScalar Speed(btSoftBody::AJoint* joint, btScalar current) {
-		return (motorcontrol.Speed(joint, current));
-	}
-	btScalar angle;
-	btScalar sign;
-};
-
-static SteerControl steercontrol_f(+1);
-static SteerControl steercontrol_r(-1);
-
-//
-
-static void Init_ClusterDeform(SoftDemo* pdemo) {
-	btSoftBody* psb = Ctor_ClusterTorus(pdemo, btVector3(0, 0, 0), btVector3(SIMD_PI / 2, 0, SIMD_HALF_PI));
-	psb->generateClusters(8);
-	psb->m_cfg.kDF = 1;
-}
-
-//
-
-static void Init_ClusterCollide1(SoftDemo* pdemo) {
-	const btScalar s = 8;
-	btSoftBody* psb = btSoftBodyHelpers::CreatePatch(pdemo->m_softBodyWorldInfo, btVector3(-s, 0, -s),
-			btVector3(+s, 0, -s),
-			btVector3(-s, 0, +s),
-			btVector3(+s, 0, +s),
-			17, 17, //9,9,//31,31,
-			1 + 2 + 4 + 8,
-			true);
-	btSoftBody::Material* pm = psb->appendMaterial();
-	pm->m_kLST = 0.4;
-	pm->m_flags -= btSoftBody::fMaterial::DebugDraw;
-	psb->m_cfg.kDF = 1;
-	psb->m_cfg.kSRHR_CL = 1;
-	psb->m_cfg.kSR_SPLT_CL = 0;
-	psb->m_cfg.collisions = btSoftBody::fCollision::CL_SS +
-
-			btSoftBody::fCollision::CL_RS;
-	psb->generateBendingConstraints(2, pm);
-
-	psb->getCollisionShape()->setMargin(0.05);
-	psb->setTotalMass(50);
-
-	///pass zero in generateClusters to create  cluster for each tetrahedron or triangle
-	psb->generateClusters(0);
-	//psb->generateClusters(64);
-
-	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
-
-	Ctor_RbUpStack(pdemo, 10);
-}
-
-/* Init		*/
+/* Init	*/
 void (*demofncs[])(SoftDemo*) = {
 	Init_ClothAttach
 };
@@ -714,10 +435,6 @@ void SoftDemo::clientResetScene() {
 	m_dynamicsWorld->addCollisionObject(newOb);
 
 	m_softBodyWorldInfo.m_sparsesdf.Reset();
-
-
-	motorcontrol.goal = 0;
-	motorcontrol.maxtorque = 0;
 
 	m_softBodyWorldInfo.air_density = (btScalar) 1.2;
 	m_softBodyWorldInfo.water_density = 0;
@@ -1001,21 +718,16 @@ void SoftDemo::setDrawClusters(bool drawClusters) {
 	}
 }
 
+void SoftDemo::updateWindVelocity(float x, float y, float z) {
+	btSoftBodyArray& sbs = getSoftDynamicsWorld()->getSoftBodyArray();
+	for (int ib = 0; ib < sbs.size(); ++ib) {
+		sbs[ib]->setWindVelocity(btVector3(x, y, z));
+	}
+}
+
 void SoftDemo::keyboardCallback(unsigned char key, int x, int y) {
 	switch (key) {
 		case 'd': sDemoMode = !sDemoMode;
-			break;
-		case 'n': motorcontrol.maxtorque = 10;
-			motorcontrol.goal += 1;
-			break;
-		case 'm': motorcontrol.maxtorque = 10;
-			motorcontrol.goal -= 1;
-			break;
-		case 'l': steercontrol_f.angle += 0.1;
-			steercontrol_r.angle += 0.1;
-			break;
-		case 'k': steercontrol_f.angle -= 0.1;
-			steercontrol_r.angle -= 0.1;
 			break;
 		case ']': ++current_demo;
 			clientResetScene();
@@ -1042,8 +754,6 @@ void SoftDemo::keyboardCallback(unsigned char key, int x, int y) {
 	}
 }
 
-//
-
 void SoftDemo::mouseMotionFunc(int x, int y) {
 	if (m_node && (m_results.fraction < 1.f)) {
 		if (!m_drag) {
@@ -1061,8 +771,6 @@ void SoftDemo::mouseMotionFunc(int x, int y) {
 		DemoApplication::mouseMotionFunc(x, y);
 	}
 }
-
-//
 
 void SoftDemo::mouseFunc(int button, int state, int x, int y) {
 	if (button == 0) {
@@ -1140,13 +848,7 @@ void SoftDemo::mouseFunc(int button, int state, int x, int y) {
 
 void SoftDemo::initPhysics() {
 	///create concave ground mesh
-
-
 	m_azi = 0;
-
-	//reset and disable motorcontrol at the start
-	motorcontrol.goal = 0;
-	motorcontrol.maxtorque = 0;
 
 	btCollisionShape* groundShape = 0;
 	{
