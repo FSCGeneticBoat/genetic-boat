@@ -61,10 +61,7 @@ const int gNumObjects = 1;
 const int gNumObjects = 1; //try this in release mode: 3000. never go above 16384, unless you increate maxNumObjects  value in DemoApplication.cp
 #endif
 
-const int maxNumObjects = 32760;
-
 #define CUBE_HALF_EXTENTS 1.5
-#define EXTRA_HEIGHT -10.f
 
 
 #ifdef USE_AMD_OPENCL
@@ -321,22 +318,40 @@ static inline btVector3 Vector3Rand() {
 
 static void Init_ClothAttach(SoftDemo* pdemo) {
 	//TRACEDEMO
-	const btScalar s = 4;
-	const btScalar h = 6; /* box height startTransform*/
-	const int r = 9;
-	btSoftBody* psb = btSoftBodyHelpers::CreatePatch(pdemo->m_softBodyWorldInfo,
-			btVector3(-s, 1, -s),
-			btVector3(+s, 1, -s),
-			btVector3(0, r * 2, -s),
-			btVector3(0, r * 2, -s), r, r, 0, true);
+	const btScalar boatBaseWidth = 4;
+	const btScalar boatBaseLength = boatBaseWidth * 2;
+	const btScalar clothBase = boatBaseLength;
+	const btScalar clothHeightOffset = 3;
+	const int h = 9;
+	btSoftBody* psb = btSoftBodyHelpers::CreatePatchUV(pdemo->m_softBodyWorldInfo,
+			btVector3(0, clothHeightOffset, 0), 
+			btVector3(clothBase, clothHeightOffset, 0),
+			btVector3(0, h * 2, 0),
+			btVector3(0, h * 2, 0), h, h, 0, true);
 
+	btCompoundShape* compound = new btCompoundShape();
+	
+	
+	btTransform boatBaseTransform, treeTransform, compoundTransform;
+	
+	boatBaseTransform.setIdentity();
+	boatBaseTransform.setOrigin(btVector3(0, 0, 0));
+	
+	treeTransform.setIdentity();
+	treeTransform.setOrigin(btVector3(0, h, 0));
+	
+	compoundTransform.setIdentity();
+	compoundTransform.setOrigin(btVector3(0, 0, 0));
+	
+	/* base shape */
+	compound->addChildShape(boatBaseTransform, 
+		new btBoxShape(btVector3(boatBaseWidth, 1, boatBaseLength)));
+	/* tree shape */
+	compound->addChildShape(treeTransform, new btCylinderShape(btVector3(0.2, h, 0)));
 
-	btTransform startTransform;
-	startTransform.setIdentity();
-	startTransform.setOrigin(btVector3(0, 0, -s));
-	btRigidBody* body = pdemo->localCreateRigidBody(120, startTransform,
-			new btBoxShape(btVector3(s, 1, 25)));
-
+	
+	btRigidBody* boat = pdemo->localCreateRigidBody(120, compoundTransform, compound);
+	
 	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
 
 	psb->getCollisionShape()->setMargin(0.5);
@@ -364,13 +379,14 @@ static void Init_ClothAttach(SoftDemo* pdemo) {
 	psb->transform(trs);*/
 	psb->setTotalMass(2.0);
 
-	psb->setWindVelocity(btVector3(4, -12.0, -85.0));
+	psb->setWindVelocity(btVector3(10, -12.0, -85.0));
 	pdemo->m_cutting = true;	
 	pdemo->m_autocam = true;
-	psb->appendAnchor(0, body);
-	psb->appendAnchor(r - 1, body);
-	psb->appendAnchor(r * (r - 1), body);
-	psb->appendAnchor(r * r - 1, body);
+	psb->appendAnchor(0, boat);
+	psb->appendAnchor(h - 1, boat);
+	psb->appendAnchor(h * (h - 1), boat);
+	psb->appendAnchor(h * h - 1, boat);
+	
 }
 
 /* Init	*/
@@ -413,7 +429,7 @@ void SoftDemo::clientResetScene() {
 	//create ground object
 	btTransform tr;
 	tr.setIdentity();
-	tr.setOrigin(btVector3(0, -12, 0));
+	tr.setOrigin(btVector3(0, -2.5, 0));
 
 	btCollisionObject* newOb = new btCollisionObject();
 	newOb->setWorldTransform(tr);
