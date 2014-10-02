@@ -318,56 +318,95 @@ static inline btVector3 Vector3Rand() {
 
 static void Init_ClothAttach(SoftDemo* pdemo) {
 	//TRACEDEMO
-	const btScalar boatBaseWidth = 4;
+	const btScalar boatBaseWidth = 5;
 	const btScalar boatBaseLength = boatBaseWidth * 2;
+	const btScalar catamaranHullsHeight = 1;
+	const btScalar catamaranHullsLength = 10;
 	const btScalar clothBase = boatBaseLength;
 	const btScalar clothHeightOffset = 3;
 	const int h = 9;
-	btSoftBody* psb = btSoftBodyHelpers::CreatePatchUV(pdemo->m_softBodyWorldInfo,
-			btVector3(0, clothHeightOffset, 0), 
+
+
+	btSoftBody* mainSail = btSoftBodyHelpers::CreatePatchUV(pdemo->m_softBodyWorldInfo,
+			btVector3(0, clothHeightOffset, 0),
 			btVector3(clothBase, clothHeightOffset, 0),
 			btVector3(0, h * 2, 0),
 			btVector3(0, h * 2, 0), h, h, 0, true);
 
-	btCompoundShape* compound = new btCompoundShape();
-	
-	
-	btTransform boatBaseTransform, treeTransform, compoundTransform;
-	
-	boatBaseTransform.setIdentity();
-	boatBaseTransform.setOrigin(btVector3(0, 0, 0));
-	
-	treeTransform.setIdentity();
-	treeTransform.setOrigin(btVector3(0, h, 0));
-	
-	compoundTransform.setIdentity();
-	compoundTransform.setOrigin(btVector3(0, 0, 0));
-	
-	/* base shape */
-	compound->addChildShape(boatBaseTransform, 
-		new btBoxShape(btVector3(boatBaseWidth, 1, boatBaseLength)));
-	/* tree shape */
-	compound->addChildShape(treeTransform, new btCylinderShape(btVector3(0.2, h, 0)));
 
-	
-	btRigidBody* boat = pdemo->localCreateRigidBody(120, compoundTransform, compound);
-	
-	pdemo->getSoftDynamicsWorld()->addSoftBody(psb);
+	btCompoundShape* catamaranCompound = new btCompoundShape();
 
-	psb->getCollisionShape()->setMargin(0.5);
-	btSoftBody::Material* pm = psb->appendMaterial();
+	/* simple rotation from vertical to horizzontal */
+	btQuaternion rot;
+	rot.setRotation(btVector3(1, 0, 0), btScalar(SIMD_PI / 2));
+    
+	btTransform catOriginalHull1Transform, catOriginalHull1HeadTransform, catOriginalHull1TailTransform;
+	btTransform catOriginalHull2Transform, catOriginalHull2HeadTransform, catOriginalHull2TailTransform;
+	btTransform catTopSideTransform, catMastTreeTransform, compoundTransform;
+	
+    	/* Hull 1 */
+    	catOriginalHull1Transform.setIdentity();
+	catOriginalHull1Transform.setOrigin(btVector3(boatBaseWidth, 0, 0));
+	catOriginalHull1Transform.setRotation(rot);
+	catamaranCompound->addChildShape(catOriginalHull1Transform, new btCylinderShape(btVector3(catamaranHullsHeight, catamaranHullsLength, 0)));
+    
+	catOriginalHull1HeadTransform.setIdentity();
+	catOriginalHull1HeadTransform.setOrigin(btVector3(boatBaseWidth, 0, catamaranHullsLength));
+	catamaranCompound->addChildShape(catOriginalHull1HeadTransform, new btSphereShape(/* radius */catamaranHullsHeight));
+    
+	catOriginalHull1TailTransform.setIdentity();
+	catOriginalHull1TailTransform.setOrigin(btVector3(boatBaseWidth, 0, -catamaranHullsLength));
+	catamaranCompound->addChildShape(catOriginalHull1TailTransform, new btSphereShape(/* radius */catamaranHullsHeight));
+        
+
+	/* Hull 2 */
+    	catOriginalHull2Transform.setIdentity();
+	catOriginalHull2Transform.setOrigin(btVector3(-boatBaseWidth, 0, 0));
+	catOriginalHull2Transform.setRotation(rot);
+	catamaranCompound->addChildShape(catOriginalHull2Transform, new btCylinderShape(btVector3(catamaranHullsHeight, catamaranHullsLength, 0)));
+    
+	catOriginalHull2HeadTransform.setIdentity();
+	catOriginalHull2HeadTransform.setOrigin(btVector3(-boatBaseWidth, 0, catamaranHullsLength));
+	catamaranCompound->addChildShape(catOriginalHull2HeadTransform, new btSphereShape(/* radius */catamaranHullsHeight));
+    
+	catOriginalHull2TailTransform.setIdentity();
+	catOriginalHull2TailTransform.setOrigin(btVector3(-boatBaseWidth, 0, -catamaranHullsLength));
+	catamaranCompound->addChildShape(catOriginalHull2TailTransform, new btSphereShape(/* radius */catamaranHullsHeight));
+    
+	/* Base */
+	catTopSideTransform.setIdentity();
+	catTopSideTransform.setOrigin(btVector3(0, 0.9, 0));
+	catamaranCompound->addChildShape(catTopSideTransform, new btBoxShape(btVector3(boatBaseWidth, 0.1, boatBaseLength/2)));
+    
+    
+	/* Mast Tree */
+	catMastTreeTransform.setIdentity();
+	catMastTreeTransform.setOrigin(btVector3(0, h, 0));
+	catamaranCompound->addChildShape(catMastTreeTransform, new btCylinderShape(btVector3(0.2, h, 0)));
+    
+    
+	/* Compound */
+    	compoundTransform.setIdentity();
+	compoundTransform.setOrigin(btVector3(0, 1, 0));
+	btRigidBody* catamaran = pdemo->localCreateRigidBody(120, compoundTransform, catamaranCompound);
+
+
+	pdemo->getSoftDynamicsWorld()->addSoftBody(mainSail);
+
+	mainSail->getCollisionShape()->setMargin(0.5);
+	btSoftBody::Material* pm = mainSail->appendMaterial();
 	pm->m_kLST = 0.0004;
 	pm->m_flags -= btSoftBody::fMaterial::DebugDraw;
-	psb->generateBendingConstraints(2, pm);
+	mainSail->generateBendingConstraints(2, pm);
 
-	psb->m_cfg.kLF = 0.05;
-	psb->m_cfg.kDG = 0.01;
+	mainSail->m_cfg.kLF = 0.05;
+	mainSail->m_cfg.kDG = 0.01;
 
 	//psb->m_cfg.kLF			=	0.004;
 	//psb->m_cfg.kDG			=	0.0003;
 
-	psb->m_cfg.piterations = 2;
-	psb->m_cfg.aeromodel = btSoftBody::eAeroModel::V_TwoSidedLiftDrag;
+	mainSail->m_cfg.piterations = 2;
+	mainSail->m_cfg.aeromodel = btSoftBody::eAeroModel::V_TwoSidedLiftDrag;
 
 	/*btTransform trs;
 	btQuaternion rot;
@@ -377,16 +416,17 @@ static void Init_ClothAttach(SoftDemo* pdemo) {
 	trs.setOrigin(pos);
 	trs.setRotation(rot);
 	psb->transform(trs);*/
-	psb->setTotalMass(2.0);
+	mainSail->setTotalMass(2.0);
 
-	psb->setWindVelocity(btVector3(10, -12.0, -85.0));
-	pdemo->m_cutting = true;	
+	mainSail->setWindVelocity(btVector3(10, -12.0, -85.0));
+	pdemo->m_cutting = true;
 	pdemo->m_autocam = true;
-	psb->appendAnchor(0, boat);
-	psb->appendAnchor(h - 1, boat);
-	psb->appendAnchor(h * (h - 1), boat);
-	psb->appendAnchor(h * h - 1, boat);
-	
+	mainSail->appendAnchor(0, catamaran);
+	mainSail->appendAnchor(h - 1, catamaran);
+	mainSail->appendAnchor(h * (h - 1), catamaran);
+	mainSail->appendAnchor(h * h - 1, catamaran);
+    
+    
 }
 
 /* Init	*/
