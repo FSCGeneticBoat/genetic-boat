@@ -598,7 +598,7 @@ static void Init_ClothAttach(SoftDemo* pdemo) {
 	psb->appendAnchor(0, body);
 	psb->appendAnchor(r - 1, body);
 	psb->appendAnchor(72, body);
-    	psb->appendAnchor(80, body);
+    psb->appendAnchor(80, body);
 
 }
 
