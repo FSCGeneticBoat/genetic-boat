@@ -281,8 +281,7 @@ void (*demo_run_functions[NUM_DEMOS])(HfFluidDemo*)=
 };
 void (*demo_init_functions[NUM_DEMOS])(HfFluidDemo*)=
 {
-	
-	Init_Drops,
+	Init_Drops
 };
 
 btScalar g_ele_array[NUM_DEMOS] = {
@@ -310,8 +309,15 @@ const int maxNumObjects = 32760;
 #define CUBE_HALF_EXTENTS 1.5
 #define EXTRA_HEIGHT -10.f
 
+void HfFluidDemo::updateWindVelocity(float x, float y, float z) {
+	btSoftRigidDynamicsWorld* softWorld = getSoftRigidDynamiscsWorld();
+	btSoftBodyArray& sbs = softWorld->getSoftBodyArray();
+	for (int ib = 0; ib < sbs.size(); ib++)
+		sbs[ib]->setWindVelocity(btVector3(x, y, z));
+}
 //
-void HfFluidDemo::createStack( btCollisionShape* boxShape, float halfCubeSize, int size, float zPos )
+void HfFluidDemo::createStack(btCollisionShape* boxShape, float halfCubeSize, 
+							  int size, float zPos)
 {
 	btTransform trans;
 	trans.setIdentity();
@@ -338,7 +344,7 @@ void HfFluidDemo::createStack( btCollisionShape* boxShape, float halfCubeSize, i
 }
 
 
-void HfFluidDemo::setShootBoxShape ()
+void HfFluidDemo::setShootBoxShape()
 {
 	if (!m_shootBoxShape)
 	{
@@ -479,37 +485,32 @@ void HfFluidDemo::displayCallback(void) {
 
 
 
-void	HfFluidDemo::clientResetScene()
+void HfFluidDemo::clientResetScene()
 {
 	DemoApplication::clientResetScene();
 	/* Clean up	*/ 
-	for(int i=m_dynamicsWorld->getNumCollisionObjects()-1;i>0;i--)
-	{
-		btCollisionObject*	obj=m_dynamicsWorld->getCollisionObjectArray()[i];
-		btRigidBody*		body=btRigidBody::upcast(obj);
-		if(body&&body->getMotionState())
-		{
+	for(int i = m_dynamicsWorld->getNumCollisionObjects() - 1; i > 0; i--) {
+		btCollisionObject* obj = m_dynamicsWorld->getCollisionObjectArray()[i];
+		btRigidBody* body = btRigidBody::upcast(obj);
+		
+		if(body && body->getMotionState())
 			delete body->getMotionState();
-		}
-		while(m_dynamicsWorld->getNumConstraints())
-			{
-			btTypedConstraint*	pc=m_dynamicsWorld->getConstraint(0);
+		
+		while(m_dynamicsWorld->getNumConstraints()) {
+			btTypedConstraint* pc = m_dynamicsWorld->getConstraint(0);
 			m_dynamicsWorld->removeConstraint(pc);
 			delete pc;
-			}
+		}
 		btHfFluid* hfFluid = btHfFluid::upcast(obj);
 		if (hfFluid)
-		{
 			getHfFluidDynamicsWorld()->removeHfFluid(hfFluid);
-		} else
-		{
+		else
 			m_dynamicsWorld->removeCollisionObject(obj);
-		}
+		
 		delete obj;
 	}
 	
-		/* Init		*/ 
-
+	/* Init		*/ 
 	m_softBodyWorldInfo.m_sparsesdf.Reset();
 
 	m_softBodyWorldInfo.air_density = (btScalar) 1.2;
@@ -518,9 +519,9 @@ void	HfFluidDemo::clientResetScene()
 	m_softBodyWorldInfo.water_normal = btVector3(0, 0, 0);
 	m_softBodyWorldInfo.m_gravity.setValue(0, -10, 0);
 	
-	m_autocam						=	false;
-	m_raycast						=	false;
-	m_cutting						=	false;
+	m_autocam = false;
+	m_raycast = false;
+	m_cutting = false;
 	printf("current_demo = %d\n", current_demo);
 	m_azi = g_azi_array[current_demo];
 	m_ele = g_ele_array[current_demo];
@@ -529,7 +530,7 @@ void	HfFluidDemo::clientResetScene()
 	demo_init_functions[current_demo](this);
 }
 
-void	HfFluidDemo::renderme()
+void HfFluidDemo::renderme()
 {
 	btIDebugDraw* idraw = m_dynamicsWorld->getDebugDrawer();
 
@@ -540,9 +541,8 @@ void	HfFluidDemo::renderme()
 	int debugMode = m_dynamicsWorld->getDebugDrawer()? m_dynamicsWorld->getDebugDrawer()->getDebugMode() : -1;
 
 	//btHfFluidRigidDynamicsWorld* hfFluidWorld = (btHfFluidRigidDynamicsWorld*) m_dynamicsWorld;
-	btSoftRigidDynamicsWorld* softWorld = (btSoftRigidDynamicsWorld*) m_dynamicsWorld;
+	btSoftRigidDynamicsWorld* softWorld = getSoftRigidDynamiscsWorld();
 	btIDebugDraw*	sdraw = softWorld->getDebugDrawer();
-
 
 	for (int i = 0; i < softWorld->getSoftBodyArray().size(); i++) {
 		btSoftBody* psb = (btSoftBody*) softWorld->getSoftBodyArray()[i];

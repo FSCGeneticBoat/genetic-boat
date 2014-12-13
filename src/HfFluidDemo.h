@@ -21,6 +21,8 @@ Experimental Buoyancy fluid demo written by John McCutchan
 #include "GlutDemoApplication.h"
 #include "LinearMath/btAlignedObjectArray.h"
 #include "BulletHfFluid/btHfFluid.h"
+#include "BulletSoftBody/btSoftRigidDynamicsWorld.h"
+
 
 class btBroadphaseInterface;
 class btCollisionShape;
@@ -42,15 +44,15 @@ public:
 	btAlignedObjectArray<btFluidRididCollisionAlgorithm*> m_FluidRigidCollisionAlgorithms;
 	btSoftBodyWorldInfo m_softBodyWorldInfo;
 	
-	bool								m_autocam;
-	bool								m_cutting;
-	bool								m_raycast;
-	btScalar							m_animtime;
-	btClock								m_clock;
-	int									m_lastmousepos[2];
-	btVector3							m_impact;
-	btVector3							m_goal;
-	bool								m_drag;
+	bool m_autocam;
+	bool m_cutting;
+	bool m_raycast;
+	btScalar m_animtime;
+	btClock m_clock;
+	int m_lastmousepos[2];
+	btVector3 m_impact;
+	btVector3 m_goal;
+	bool m_drag;
 
 
 	//keep the collision shapes, for deletion/cleanup
@@ -91,7 +93,10 @@ public:
 
 	virtual void displayCallback();
 
-	void createStack( btCollisionShape* boxShape, float halfCubeSize, int size, float zPos );
+	void createStack(btCollisionShape* boxShape, 
+					 float halfCubeSize, 
+					 int size, 
+					 float zPos);
 
 	static DemoApplication* Create()
 	{
@@ -101,27 +106,33 @@ public:
 		return demo;
 	}
 
-	virtual const btHfFluidRigidDynamicsWorld*	getHfFluidDynamicsWorld() const
+	virtual const btSoftRigidDynamicsWorld* getSoftRigidDynamiscsWorld() const
 	{
-		///just make it a btSoftRigidDynamicsWorld please
-		///or we will add type checking
-		return (btHfFluidRigidDynamicsWorld*) m_dynamicsWorld;
+		return (btSoftRigidDynamicsWorld*)m_dynamicsWorld;
+	}
+	
+	virtual btSoftRigidDynamicsWorld* getSoftRigidDynamiscsWorld()
+	{
+		return (btSoftRigidDynamicsWorld*)m_dynamicsWorld;
+	}
+	
+	virtual const btHfFluidRigidDynamicsWorld* getHfFluidDynamicsWorld() const
+	{
+		return (btHfFluidRigidDynamicsWorld*)m_dynamicsWorld;
 	}
 
-	virtual btHfFluidRigidDynamicsWorld*	getHfFluidDynamicsWorld()
+	virtual btHfFluidRigidDynamicsWorld* getHfFluidDynamicsWorld()
 	{
-		///just make it a btSoftRigidDynamicsWorld please
-		///or we will add type checking
-		return (btHfFluidRigidDynamicsWorld*) m_dynamicsWorld;
+		return (btHfFluidRigidDynamicsWorld*)m_dynamicsWorld;
 	}
 
-	//
-	void	clientResetScene();
-	void	renderme();
-	void	keyboardCallback(unsigned char key, int x, int y);
-	void	mouseFunc(int button, int state, int x, int y);
-	void	mouseMotionFunc(int x,int y);
+	void clientResetScene();
+	void renderme();
+	void keyboardCallback(unsigned char key, int x, int y);
+	void mouseFunc(int button, int state, int x, int y);
+	void mouseMotionFunc(int x,int y);
 
+	void updateWindVelocity(float x, float y, float z);
 };
 
 #define MACRO_SOFT_DEMO(a) class HfFluidDemo##a : public HfFluidDemo\

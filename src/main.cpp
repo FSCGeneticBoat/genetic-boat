@@ -19,21 +19,41 @@ Experimental Buoyancy fluid demo written by John McCutchan
 #include "GlutStuff.h"
 #include "GLDebugDrawer.h"
 #include "btBulletDynamicsCommon.h"
+#include <pthread.h>
+#include <unistd.h>
 
 GLDebugDrawer	gDebugDrawer;
 
+void *windHandler(void *ptr)
+{
+	HfFluidDemo* fluidDemo = (HfFluidDemo *)ptr;
+	bool first = true;
+	sleep(2);
+	fluidDemo->updateWindVelocity(0, 50, 0);
+	first = false;
+	while (1){
+		sleep(2);
+		fluidDemo->updateWindVelocity(0, 0, 0);
+			
+	}
+}
+
 int main(int argc,char** argv)
 {
-
+	int ret;
+	pthread_t windThread;
+	
 	HfFluidDemo* fluidDemo = new HfFluidDemo();
 
 	fluidDemo->initPhysics();
+	
 	fluidDemo->getDynamicsWorld()->setDebugDrawer(&gDebugDrawer);
 
-
-	glutmain(argc, argv,1024,768,"Bullet Physics Demo. http://bulletphysics.com",fluidDemo);
+	ret = pthread_create(&windThread, NULL, windHandler, (void *)fluidDemo);
+	
+	glutmain(argc, argv,1024,768, "Bullet Physics Demo. http://bulletphysics.com",fluidDemo);
 
 	delete fluidDemo;
+	
 	return 0;
-
 }
