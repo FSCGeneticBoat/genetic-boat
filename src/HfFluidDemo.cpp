@@ -17,6 +17,8 @@ Experimental Buoyancy fluid demo written by John McCutchan
 
 #include "btBulletDynamicsCommon.h"
 
+#include "DemoApplication.h"
+
 #include "BulletHfFluid/btHfFluidRigidDynamicsWorld.h"
 #include "BulletHfFluid/btHfFluid.h"
 #include "BulletHfFluid/btHfFluidRigidCollisionConfiguration.h"
@@ -29,6 +31,16 @@ Experimental Buoyancy fluid demo written by John McCutchan
 #include "LinearMath/btRandom.h"
 #include <stdio.h> //printf debugging
 #include "LinearMath/btConvexHull.h"
+
+#include "hacdCircularList.h"
+#include "hacdVector.h"
+#include "hacdICHull.h"
+#include "hacdGraph.h"
+#include "hacdHACD.h"
+
+
+#include "cd_wavefront.h"
+#include "ConvexBuilder.h"
 
 #include "HfFluidDemo.h"
 #include "GL_ShapeDrawer.h"
@@ -69,11 +81,56 @@ unsigned	current_demo=0;
 void Init_Drops (HfFluidDemo* fluidDemo)
 {
 	btHfFluid* fluid = NULL;
+	
+	ConvexDecomposition::WavefrontObj wo;
+	wo.loadObj("boat.obj");
 
-	fluid = new btHfFluid(1, 100, 100);
+	btTriangleMesh* trimesh = new btTriangleMesh();
+	btVector3 localScaling(0.5f,0.5f,0.5f);
+
+	int i;
+	for ( i=0;i<wo.mTriCount;i++)
+	{
+		int index0 = wo.mIndices[i*3];
+		int index1 = wo.mIndices[i*3+1];
+		int index2 = wo.mIndices[i*3+2];
+
+		btVector3 vertex0(wo.mVertices[index0*3], wo.mVertices[index0*3+1],wo.mVertices[index0*3+2]);
+		btVector3 vertex1(wo.mVertices[index1*3], wo.mVertices[index1*3+1],wo.mVertices[index1*3+2]);
+		btVector3 vertex2(wo.mVertices[index2*3], wo.mVertices[index2*3+1],wo.mVertices[index2*3+2]);
+
+		vertex0 *= localScaling;
+		vertex1 *= localScaling;
+		vertex2 *= localScaling;
+
+		trimesh->addTriangle(vertex0,vertex1,vertex2);
+	}
+	
+	btConvexShape* tmpConvexShape = new btConvexTriangleMeshShape(trimesh);
+
+	//create a hull approximation
+	btShapeHull* hull = new btShapeHull(tmpConvexShape);
+	btScalar margin = tmpConvexShape->getMargin();
+	hull->buildHull(margin);
+	tmpConvexShape->setUserPointer(hull);
+
+	btConvexHullShape* boatConvexShape = new btConvexHullShape();
+	for (i=0;i<hull->numVertices();i++)
+	{
+		boatConvexShape->addPoint(hull->getVertexPointer()[i]);	
+	}
+
+	delete tmpConvexShape;
+	delete hull;
+	//fluidDemo->m_collisionShapes.push_back(convexShape);
+
+	bool useQuantization = true;
+	btCollisionShape* boatConcaveShape = new btBvhTriangleMeshShape(trimesh,useQuantization);
+	
+	fluid = new btHfFluid(btScalar(1), 100, 100);
 	btTransform xform;
 	xform.setIdentity();
-	xform.setOrigin(btVector3(btScalar(-50.0), btScalar(-20.0), btScalar(-50.0)));
+	xform.setOrigin(btVector3(btScalar(-50), btScalar(-20.0), btScalar(-50)));
 	fluid->setWorldTransform(xform);
 	fluidDemo->getHfFluidDynamicsWorld()->addHfFluid(fluid);
 	btScalar *etaArray = fluid->getEtaArray();
@@ -98,8 +155,8 @@ void Init_Drops (HfFluidDemo* fluidDemo)
 		btTransform startTransform;
 		startTransform.setIdentity();
 
-		btScalar mass = btScalar(5.0f);
-		btScalar floatyness = btScalar(0.5f);
+		btScalar mass = btScalar(1.f);
+		btScalar floatyness = btScalar(2.f);
 		
 		//rigidbody is dynamic if and only if mass is non zero, otherwise static
 		bool isDynamic = (mass != 0.f);
@@ -113,24 +170,28 @@ void Init_Drops (HfFluidDemo* fluidDemo)
 
 		startTransform.setOrigin(btVector3(start_x,start_y,start_z));
 
-		const btScalar boatBaseWidth = 7;
+		const btScalar boatBaseWidth = 2;
 		const btScalar boatBaseLength = boatBaseWidth * 2;
 		const btScalar catamaranHullsHeight = 1;
 		const btScalar catamaranHullsLength = 10;
 		const btScalar clothBase = boatBaseLength;
-		const btScalar clothHeightOffset = 3;
-		const int h = 9;
-		//using motionstate is recommended, it provides interpolation capabilities, and only synchronizes 'active' objects
-		btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+		const btScalar clothHeightOffset = 1;
+		const int h = 3;
 		
 		btSoftBody* mainSail = btSoftBodyHelpers::CreatePatchUV(fluidDemo->m_softBodyWorldInfo,
 			btVector3(0, clothHeightOffset, 0),
-			btVector3(-clothBase, clothHeightOffset, 0),
+			btVector3(0, clothHeightOffset, clothBase),
 			btVector3(0, h * 2, 0),
-			btVector3(0, h * 2, 0), h, h, 0, true);
+			btVector3(0, h * 2, 0), h*2, h*2, 0, true);
+		
+		
+		btSoftBody* mainSail2 = btSoftBodyHelpers::CreatePatchUV(fluidDemo->m_softBodyWorldInfo,
+					btVector3(0, clothHeightOffset, 0),
+					btVector3(0, clothHeightOffset, -clothBase),
+					btVector3(0, h * 2, 0),
+					btVector3(0, h * 2, 0), h*2, h*2, 0, true);
 
-
-		btCompoundShape* catamaranCompound = new btCompoundShape();
+		btCompoundShape* boatCompound = new btCompoundShape();
 
 		/* simple rotation from vertical to horizzontal */
 		btQuaternion rot;
@@ -139,74 +200,70 @@ void Init_Drops (HfFluidDemo* fluidDemo)
 		btTransform catOriginalHull1Transform, catOriginalHull1HeadTransform, catOriginalHull1TailTransform;
 		btTransform catOriginalHull2Transform, catOriginalHull2HeadTransform, catOriginalHull2TailTransform;
 		btTransform catTopSideTransform, catMastTreeTransform, compoundTransform;
+		btTransform boatConvexShapeTransform;
 
-			/* Hull 1 */
-		catOriginalHull1Transform.setIdentity();
-		catOriginalHull1Transform.setOrigin(btVector3(boatBaseWidth, 0, 0));
-		catOriginalHull1Transform.setRotation(rot);
+//		
+//		/* Hull 1 */
+//		catOriginalHull1Transform.setIdentity();
+//		catOriginalHull1Transform.setOrigin(btVector3(boatBaseWidth, 0, 0));
+//		catOriginalHull1Transform.setRotation(rot);
+//		btCylinderShape* catOriginalHull1Shape = new btCylinderShape(btVector3(catamaranHullsHeight, catamaranHullsLength, 0));
+//		btHfFluidBuoyantConvexShape* bytCatOriginalHull1Shape = new btHfFluidBuoyantConvexShape(catOriginalHull1Shape);
+//		fluidDemo->m_collisionShapes.push_back(catOriginalHull1Shape);
+//		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull1Shape);
+//		boatCompound->addChildShape(catOriginalHull1Transform, bytCatOriginalHull1Shape);
+//		
+//		catOriginalHull1HeadTransform.setIdentity();
+//		catOriginalHull1HeadTransform.setOrigin(btVector3(boatBaseWidth, 0, catamaranHullsLength));
+//		btSphereShape* catOriginalHull1HeadShape = new btSphereShape(/* radius */catamaranHullsHeight);
+//		btHfFluidBuoyantConvexShape* bytCatOriginalHull1HeadShape = new btHfFluidBuoyantConvexShape(catOriginalHull1HeadShape);
+//		fluidDemo->m_collisionShapes.push_back(catOriginalHull1HeadShape);
+//		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull1HeadShape);
+//		boatCompound->addChildShape(catOriginalHull1HeadTransform, bytCatOriginalHull1HeadShape);
+//		
+//		catOriginalHull1TailTransform.setIdentity();
+//		catOriginalHull1TailTransform.setOrigin(btVector3(boatBaseWidth, 0, -catamaranHullsLength));
+//		btSphereShape* catOriginalHull1TailShape = new btSphereShape(/* radius */catamaranHullsHeight);
+//		btHfFluidBuoyantConvexShape* bytCatOriginalHull1TailShape = new btHfFluidBuoyantConvexShape(catOriginalHull1TailShape);
+//		fluidDemo->m_collisionShapes.push_back(catOriginalHull1TailShape);
+//		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull1TailShape);
+//		boatCompound->addChildShape(catOriginalHull1TailTransform, bytCatOriginalHull1TailShape);
+//		
+//		/* Hull 2 */
+//		catOriginalHull2Transform.setIdentity();
+//		catOriginalHull2Transform.setOrigin(btVector3(-boatBaseWidth, 0, 0));
+//		catOriginalHull2Transform.setRotation(rot);
+//		btCylinderShape* catOriginalHull2Shape = new btCylinderShape(btVector3(catamaranHullsHeight, catamaranHullsLength, 0));
+//		btHfFluidBuoyantConvexShape* bytCatOriginalHull2Shape = new btHfFluidBuoyantConvexShape(catOriginalHull2Shape);
+//		fluidDemo->m_collisionShapes.push_back(catOriginalHull2Shape);
+//		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull2Shape);
+//		boatCompound->addChildShape(catOriginalHull2Transform, bytCatOriginalHull2Shape);
+//		
+//		catOriginalHull2HeadTransform.setIdentity();
+//		catOriginalHull2HeadTransform.setOrigin(btVector3(-boatBaseWidth, 0, catamaranHullsLength));
+//		btSphereShape* catOriginalHull2HeadShape = new btSphereShape(/* radius */catamaranHullsHeight);
+//		btHfFluidBuoyantConvexShape* bytCatOriginalHull2HeadShape = new btHfFluidBuoyantConvexShape(catOriginalHull2HeadShape);
+//		fluidDemo->m_collisionShapes.push_back(catOriginalHull2HeadShape);
+//		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull2HeadShape);
+//		boatCompound->addChildShape(catOriginalHull2HeadTransform, bytCatOriginalHull2HeadShape);
+//		
+//		catOriginalHull2TailTransform.setIdentity();
+//		catOriginalHull2TailTransform.setOrigin(btVector3(-boatBaseWidth, 0, -catamaranHullsLength));
+//		btSphereShape* catOriginalHull2TailShape = new btSphereShape(/* radius */catamaranHullsHeight);
+//		btHfFluidBuoyantConvexShape* bytCatOriginalHull2TailShape = new btHfFluidBuoyantConvexShape(catOriginalHull2TailShape);
+//		fluidDemo->m_collisionShapes.push_back(catOriginalHull2TailShape);
+//		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull2TailShape);
+//		boatCompound->addChildShape(catOriginalHull2TailTransform, bytCatOriginalHull2TailShape);
+//		
+//		/* Base */
+//		catTopSideTransform.setIdentity();
+//		catTopSideTransform.setOrigin(btVector3(0, 0.9, 0));
+//		btBoxShape* catBaseShape = new btBoxShape(btVector3(boatBaseWidth, 0.1, boatBaseLength/2));
+//		btHfFluidBuoyantConvexShape* buoyantBaseShape = new btHfFluidBuoyantConvexShape(catBaseShape);
+//		fluidDemo->m_collisionShapes.push_back(catBaseShape);
+//		fluidDemo->m_collisionShapes.push_back (buoyantBaseShape);
+//		boatCompound->addChildShape(catTopSideTransform, buoyantBaseShape);
 		
-		btCylinderShape* catOriginalHull1Shape = new btCylinderShape(btVector3(catamaranHullsHeight, catamaranHullsLength, 0));
-		btHfFluidBuoyantConvexShape* bytCatOriginalHull1Shape = new btHfFluidBuoyantConvexShape(catOriginalHull1Shape);
-		fluidDemo->m_collisionShapes.push_back(catOriginalHull1Shape);
-		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull1Shape);
-		catamaranCompound->addChildShape(catOriginalHull1Transform, bytCatOriginalHull1Shape);
-
-		catOriginalHull1HeadTransform.setIdentity();
-		catOriginalHull1HeadTransform.setOrigin(btVector3(boatBaseWidth, 0, catamaranHullsLength));
-		btSphereShape* catOriginalHull1HeadShape = new btSphereShape(/* radius */catamaranHullsHeight);
-		btHfFluidBuoyantConvexShape* bytCatOriginalHull1HeadShape = new btHfFluidBuoyantConvexShape(catOriginalHull1HeadShape);
-		fluidDemo->m_collisionShapes.push_back(catOriginalHull1HeadShape);
-		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull1HeadShape);
-		
-		catamaranCompound->addChildShape(catOriginalHull1HeadTransform, bytCatOriginalHull1HeadShape);
-
-		catOriginalHull1TailTransform.setIdentity();
-		catOriginalHull1TailTransform.setOrigin(btVector3(boatBaseWidth, 0, -catamaranHullsLength));
-		btSphereShape* catOriginalHull1TailShape = new btSphereShape(/* radius */catamaranHullsHeight);
-		btHfFluidBuoyantConvexShape* bytCatOriginalHull1TailShape = new btHfFluidBuoyantConvexShape(catOriginalHull1TailShape);
-		fluidDemo->m_collisionShapes.push_back(catOriginalHull1TailShape);
-		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull1TailShape);
-		
-		catamaranCompound->addChildShape(catOriginalHull1TailTransform, bytCatOriginalHull1TailShape);
-		/* Hull 2 */
-		catOriginalHull2Transform.setIdentity();
-		catOriginalHull2Transform.setOrigin(btVector3(-boatBaseWidth, 0, 0));
-		catOriginalHull2Transform.setRotation(rot);
-		
-		btCylinderShape* catOriginalHull2Shape = new btCylinderShape(btVector3(catamaranHullsHeight, catamaranHullsLength, 0));
-		btHfFluidBuoyantConvexShape* bytCatOriginalHull2Shape = new btHfFluidBuoyantConvexShape(catOriginalHull2Shape);
-		fluidDemo->m_collisionShapes.push_back(catOriginalHull2Shape);
-		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull2Shape);
-		catamaranCompound->addChildShape(catOriginalHull2Transform, bytCatOriginalHull2Shape);
-
-		catOriginalHull2HeadTransform.setIdentity();
-		catOriginalHull2HeadTransform.setOrigin(btVector3(-boatBaseWidth, 0, catamaranHullsLength));
-		btSphereShape* catOriginalHull2HeadShape = new btSphereShape(/* radius */catamaranHullsHeight);
-		btHfFluidBuoyantConvexShape* bytCatOriginalHull2HeadShape = new btHfFluidBuoyantConvexShape(catOriginalHull2HeadShape);
-		fluidDemo->m_collisionShapes.push_back(catOriginalHull2HeadShape);
-		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull2HeadShape);
-		
-		catamaranCompound->addChildShape(catOriginalHull2HeadTransform, bytCatOriginalHull2HeadShape);
-
-		catOriginalHull2TailTransform.setIdentity();
-		catOriginalHull2TailTransform.setOrigin(btVector3(-boatBaseWidth, 0, -catamaranHullsLength));
-		btSphereShape* catOriginalHull2TailShape = new btSphereShape(/* radius */catamaranHullsHeight);
-		btHfFluidBuoyantConvexShape* bytCatOriginalHull2TailShape = new btHfFluidBuoyantConvexShape(catOriginalHull2TailShape);
-		fluidDemo->m_collisionShapes.push_back(catOriginalHull2TailShape);
-		fluidDemo->m_collisionShapes.push_back(bytCatOriginalHull2TailShape);
-		
-		catamaranCompound->addChildShape(catOriginalHull2TailTransform, bytCatOriginalHull2TailShape);
-
-		/* Base */
-		catTopSideTransform.setIdentity();
-		catTopSideTransform.setOrigin(btVector3(0, 0.9, 0));
-		btBoxShape* catBaseShape = new btBoxShape(btVector3(boatBaseWidth, 0.1, boatBaseLength/2));
-		btHfFluidBuoyantConvexShape* buoyantBaseShape = new btHfFluidBuoyantConvexShape(catBaseShape);
-		fluidDemo->m_collisionShapes.push_back(catBaseShape);
-		fluidDemo->m_collisionShapes.push_back (buoyantBaseShape);
-		
-		catamaranCompound->addChildShape(catTopSideTransform, buoyantBaseShape);
-
 		/* Mast Tree */
 		catMastTreeTransform.setIdentity();
 		catMastTreeTransform.setOrigin(btVector3(0, h, 0));
@@ -215,25 +272,27 @@ void Init_Drops (HfFluidDemo* fluidDemo)
 		fluidDemo->m_collisionShapes.push_back(catMastTreeShape);
 		fluidDemo->m_collisionShapes.push_back (buoyantCatMastTreeShape);
 		
-		catamaranCompound->addChildShape(catMastTreeTransform, buoyantCatMastTreeShape);
+		/* Boat Convex shape */
+		boatConvexShapeTransform.setIdentity();
+		boatConvexShapeTransform.setOrigin(btVector3(2, -2, 0));
+		btHfFluidBuoyantConvexShape* buoyantConvexShape = new btHfFluidBuoyantConvexShape(boatConvexShape/*(btConvexShape*)boatConcaveShape*/);
+		fluidDemo->m_collisionShapes.push_back(boatConcaveShape);
+		fluidDemo->m_collisionShapes.push_back(buoyantConvexShape);
+		boatCompound->addChildShape(boatConvexShapeTransform, buoyantConvexShape);
 		
-		for (int i = 0; i < catamaranCompound->getNumChildShapes(); i++) {
-			btCollisionShape* childShape = catamaranCompound->getChildShape(i);
+		boatCompound->addChildShape(catMastTreeTransform, buoyantCatMastTreeShape);
+		
+		for (int i = 0; i < boatCompound->getNumChildShapes(); i++) {
+			btCollisionShape* childShape = boatCompound->getChildShape(i);
 			((btHfFluidBuoyantConvexShape *)(childShape))->setFloatyness(floatyness);
-			((btHfFluidBuoyantConvexShape *)(childShape))->generateShape(btScalar(0.25f), btScalar(0.05f));
+			((btHfFluidBuoyantConvexShape *)(childShape))->generateShape(btScalar(0.50f), btScalar(0.5f));
 		}
 		
 		/* Compound */
 		compoundTransform.setIdentity();
 		compoundTransform.setOrigin(btVector3(0, 1, 0));
-		if (isDynamic)
-			catamaranCompound->calculateLocalInertia(mass,localInertia);
-		btRigidBody::btRigidBodyConstructionInfo rbInfo = 
-				btRigidBody::btRigidBodyConstructionInfo(mass,myMotionState,catamaranCompound,localInertia);
+		btRigidBody* boatRBody = fluidDemo->localCreateRigidBody(mass,startTransform,boatCompound);
 		
-		btRigidBody* catamaran = new btRigidBody(rbInfo);
-		fluidDemo->getHfFluidDynamicsWorld()->addRigidBody(catamaran);
-
 		fluidDemo->getHfFluidDynamicsWorld()->addSoftBody(mainSail);
 
 		mainSail->getCollisionShape()->setMargin(0.5);
@@ -259,16 +318,54 @@ void Init_Drops (HfFluidDemo* fluidDemo)
 		trs.setOrigin(pos);
 		trs.setRotation(rot);
 		psb->transform(trs);*/
-		mainSail->setTotalMass(0.3);
+		mainSail->setTotalMass(0.1);
 
-		mainSail->setWindVelocity(btVector3(0, 4, 40.0));
+		mainSail->setWindVelocity(btVector3(10, 0, 0));
 		//fluidDemo->m_cutting = true;
-		fluidDemo->m_autocam = true;
+		fluidDemo->m_autocam = false;
 		
-		mainSail->appendAnchor(0, catamaran);
-		mainSail->appendAnchor(h - 1, catamaran);
-		mainSail->appendAnchor(h * (h - 1), catamaran);
-		mainSail->appendAnchor(h * h - 1, catamaran);
+		mainSail->appendAnchor(0, boatRBody);
+		mainSail->appendAnchor(h*2 - 1, boatRBody);
+		mainSail->appendAnchor(h * 2 * (h*2 - 1), boatRBody);
+		mainSail->appendAnchor(h * 2 * h * 2 - 1, boatRBody);
+		
+		
+		
+		fluidDemo->getHfFluidDynamicsWorld()->addSoftBody(mainSail2);
+
+		mainSail2->getCollisionShape()->setMargin(0.5);
+		pm = mainSail2->appendMaterial();
+		pm->m_kLST = 0.0004;
+		pm->m_flags -= btSoftBody::fMaterial::DebugDraw;
+		mainSail2->generateBendingConstraints(2, pm);
+
+		mainSail2->m_cfg.kLF = 0.05;
+		mainSail2->m_cfg.kDG = 0.01;
+
+		//psb->m_cfg.kLF			=	0.004;
+		//psb->m_cfg.kDG			=	0.0003;
+
+		mainSail2->m_cfg.piterations = 2;
+		mainSail2->m_cfg.aeromodel = btSoftBody::eAeroModel::V_TwoSidedLiftDrag;
+
+		/*btTransform trs;
+		btQuaternion rot;
+		pos += btVector3(s * 2 + gap, 0, 0);
+		rot.setRotation(btVector3(1, 0, 0), btScalar(SIMD_PI / 2));
+		trs.setIdentity();
+		trs.setOrigin(pos);
+		trs.setRotation(rot);
+		psb->transform(trs);*/
+		mainSail2->setTotalMass(0.1);
+
+		mainSail2->setWindVelocity(btVector3(10, 0, 0));
+		//fluidDemo->m_cutting = true;
+		fluidDemo->m_autocam = false;
+		
+		mainSail2->appendAnchor(0, boatRBody);
+		mainSail2->appendAnchor(h*2 - 1, boatRBody);
+		mainSail2->appendAnchor(h * 2 * (h*2 - 1), boatRBody);
+		mainSail2->appendAnchor(h * 2 * h * 2 - 1, boatRBody);
 		
 	}
 }
@@ -285,17 +382,17 @@ void (*demo_init_functions[NUM_DEMOS])(HfFluidDemo*)=
 };
 
 btScalar g_ele_array[NUM_DEMOS] = {
-	btScalar(0),
+	btScalar(10),
 	
 };
 
 btScalar g_azi_array[NUM_DEMOS] = {
-	btScalar(50),
+	btScalar(90),
 	
 };
 
 btScalar g_cameraDistance_array[NUM_DEMOS] = {
-	btScalar(40),
+	btScalar(15),
 };
 
 #ifdef _DEBUG
